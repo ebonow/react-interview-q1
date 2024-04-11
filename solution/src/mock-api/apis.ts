@@ -1,11 +1,11 @@
 /**
  * do not change the implementation
  */
-export const isNameValid = (name) => new Promise((resolve) => {
+export const isNameValid = (name: string) => new Promise((resolve) => {
     setTimeout(() => {
         resolve(name !== 'invalid name');
     }, Math.random() * 2000);
-});
+}) as Promise<boolean>;
 
 /**
  * do not change the implementation
