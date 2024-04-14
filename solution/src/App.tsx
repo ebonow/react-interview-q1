@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useDebounce, cn } from './utils';
 import { isNameValid, getLocations } from './mock-api/apis';
 
 import './App.css';
@@ -17,11 +18,18 @@ function App() {
   const [selectedCountry, setSelectedCountry] = useState("");
 
   const [users, setUsers] = useState<User[]>([]);
+  const inputRef = useRef<null | HTMLInputElement>(null);
 
+  // Debounce search term so that it only gives us latest value ...
+  // ... if searchTerm has not been updated within last 500ms.
+  // The goal is to only have the API call fire when user stops typing ...
+  // ... so that we aren't hitting our API rapidly.
+  const debouncedName = useDebounce(name, 500);
+  
   const hasInvalidName = !!name.trim() && !isNameValidating && !isNameInputValid;
 
-  const isAddUserEnabled = useMemo(() => (name && isNameInputValid && !isNameValidating && selectedCountry), [
-    name, isNameInputValid, !isNameValidating, selectedCountry
+  const isAddUserEnabled = useMemo(() => (name.trim() && isNameInputValid && !isNameValidating && selectedCountry), [
+    name, isNameInputValid, isNameValidating, selectedCountry
   ]);
 
   const addUser = () => {
@@ -42,22 +50,27 @@ function App() {
     fetchCountryList();
   }, []);
 
+  useEffect(() => {
+    const validateName = async (input: string) => {
+      setIsNameInputValid(false);
+  
+      /// TODO: Add AbortSignal to api featch call to cancel any previous requests to avoid race conditions
+      /// For prupose of this exercise, adding reference to inputElement to verify and ignore previous input value
+      const result = await isNameValid(input);
+      if (input !== inputRef.current?.value) {
+        return;
+      }
+      
+      setIsNameInputValid(result);
+      setIsNameValidating(false);
+    };
+
+    validateName(debouncedName);
+  }, [debouncedName])
+
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setName(e.currentTarget.value);
-
-    /// TODO: Add debounce to reduce calls to server
-    validateName(e.currentTarget.value);
-  }
-
-  const validateName = async (input: string) => {
     setIsNameValidating(true);
-    setIsNameInputValid(false);
-
-    /// TODO: Add AbortSignal to api featch call to cancel any previous requests to avoid race conditions
-    const result = await isNameValid(input);
-
-    setIsNameInputValid(result);
-    setIsNameValidating(false);
+    setName(e.currentTarget.value);
   }
 
   const classNames = {
@@ -84,11 +97,11 @@ function App() {
         <div className={classNames.row}>
            <label className={classNames.label}>Name</label>
            <div className={classNames.formFieldWrapper}>
-              <input type="text" className={classNames.formField} onChange={onChange} value={name} />
+              <input type="text" className={classNames.formField} onChange={onChange} value={name} ref={inputRef} />
             </div>
             <ValidationIcon 
               className={classNames.validationIcon} 
-              isValid={(!hasInvalidName && !!name)}
+              isValid={(!hasInvalidName && !!name.trim())}
               isError={hasInvalidName}
               isFetching={isNameValidating}
             />
@@ -118,9 +131,9 @@ function App() {
         </div>
         <div className={classNames.buttonsWrapper}>
           {!!users.length && (
-            <button className={`${classNames.button} border-red-500 text-red-500 bg-red-100`} onClick={clearUsers}>Clear</button>
+            <button className={cn(classNames.button, 'border-red-500 text-red-500 bg-red-100')} onClick={clearUsers}>Clear</button>
           )}
-          <button className={`${classNames.button} border-green-500 text-green-500 bg-green-100`} disabled={!isAddUserEnabled} onClick={addUser}>Add</button>
+          <button className={cn(classNames.button, 'border-green-500 text-green-500 bg-green-100')} disabled={!isAddUserEnabled} onClick={addUser}>Add</button>
         </div>
         {!!users.length && (
           <table className={classNames.table}>
@@ -134,21 +147,21 @@ function App() {
               ))}
             </tbody>
           </table>
-      )}
+        )}
       </section>
     </div>
   );
 }
 
 
-interface ValidationProps {
-  className?: string;
-  isFetching?: boolean;
-  isError?: boolean;
-  isValid?: boolean;
+type ValidationIconProps = {
+  className?: string,
+  isFetching?: boolean,
+  isError?: boolean,
+  isValid?: boolean,
 }
 
-const ValidationIcon = (props: ValidationProps) => {
+const ValidationIcon = (props: ValidationIconProps) => {
   const { className, isFetching, isError, isValid } = props;
 
   return (
